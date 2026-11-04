@@ -363,7 +363,7 @@ let sample=null, db=null;
 try{const f=localStorage.getItem("mf-filter");if(f)filt=f}catch(e){}
 
 function buildNav(){
-  $("#nav").innerHTML=`<li><button data-c="home" aria-current="${cur==="home"&&!query}"><span class="gl">⌂</span><span>الرئيسية</span></button></li>`+CATS.map(c=>`<li><button data-c="${c.id}" aria-current="${c.id===cur&&!query}"><span class="gl">${c.g}</span><span>${c.n}</span><span class="cnt">${c.all.length}</span></button></li>`).join("");
+  $("#nav").innerHTML=`<li><button data-c="home" aria-current="${cur==="home"&&!query}"><span class="gl">⌂</span><span>الرئيسية</span></button></li>`+CATS.map(c=>`<li><button data-c="${c.id}" aria-current="${c.id===cur&&!query}"><span class="gl">${c.g}</span><span>${c.n}</span><span class="cnt">${c.all.filter(i=>!SEEN.has(i.key)).length}</span></button></li>`).join("")+`<li><button data-c="read" aria-current="${cur==="read"&&!query}"><span class="gl">✓</span><span>مقروء</span><span class="cnt">${readItems().length}</span></button></li>`;
 }
 function hl(html){
   if(!query)return html;
@@ -416,10 +416,11 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function orderFor(c){
   const keys=c.all.filter(i=>filt==="all"||i.t===filt).map(i=>i.key);
   const k=c.id+"|"+filt;let o=ord[k];
-  if(!o){o=shuffle(keys.filter(x=>!SEEN.has(x))).concat(shuffle(keys.filter(x=>SEEN.has(x))));ord[k]=o;pos[k]=0}
-  else{shuffle(keys.filter(x=>!o.includes(x))).forEach(x=>o.push(x))}
+  if(!o){o=shuffle(keys.filter(x=>!SEEN.has(x)));ord[k]=o;pos[k]=0}
+  else{shuffle(keys.filter(x=>!o.includes(x)&&!SEEN.has(x))).forEach(x=>o.push(x))}
   return k;
 }
+function readItems(){const m=new Map(ALL.map(x=>[x.key,x]));return [...SEEN].reverse().map(k=>m.get(k)).filter(Boolean)}
 function render(){
   buildNav();
   document.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===filt));
@@ -431,7 +432,14 @@ function render(){
     $("#title").textContent="خزانة المعارف";
     $("#sub").textContent="اختر قسمًا وتنقّل بين معلوماته واحدة واحدة، أو ابحث عن أي سؤال.";
     $("#gen").hidden=true;
-    $("#list").innerHTML=`<div class="catgrid">${CATS.map(c=>`<button class="catbtn" data-c="${c.id}"><span class="gl">${c.g}</span><span>${c.n}</span><span class="muted">${c.all.length.toLocaleString("ar-SA")}</span></button>`).join("")}</div>`;
+    $("#list").innerHTML=`<div class="catgrid">${CATS.map(c=>`<button class="catbtn" data-c="${c.id}"><span class="gl">${c.g}</span><span>${c.n}</span><span class="muted">${c.all.filter(i=>!SEEN.has(i.key)).length.toLocaleString("ar-SA")}</span></button>`).join("")}<button class="catbtn" data-c="read"><span class="gl">✓</span><span>مقروء</span><span class="muted">${readItems().length.toLocaleString("ar-SA")}</span></button></div>`;
+    return;
+  }
+  if(cur==="read"&&!query){
+    const items=readItems().filter(i=>filt==="all"||i.t===filt);
+    $("#title").textContent="مقروء";$("#sub").textContent=`${items.length.toLocaleString("ar-SA")} بطاقة قرأتها، الأحدث أولًا`;
+    $("#gen").hidden=true;$("#mode").hidden=true;
+    $("#list").innerHTML=items.length?items.map(it=>card(it,true)).join(""):`<div class="empty">ما قرأت شي للحين. أي بطاقة تقرأها في الأقسام تنتقل هنا تلقائيًا.</div>`;
     return;
   }
   const c=CATS.find(x=>x.id===cur);
@@ -451,12 +459,12 @@ function render(){
   const k=orderFor(c),o=ord[k];let i=Math.min(pos[k]||0,Math.max(o.length-1,0));pos[k]=i;
   $("#title").textContent=c.n;
   $("#gen").hidden=true;$("#mode").textContent="عرض الكل كقائمة";$("#mode").hidden=false;
-  const it=ALL.find(x=>x.key===o[i]);if(it)markSeen(it.key);
-  const unseen=o.filter(x=>!SEEN.has(x)).length;
+  const it=ALL.find(x=>x.key===o[i]);if(it){markSeen(it.key);buildNav()}
+  const unseen=c.all.filter(x=>!SEEN.has(x.key)).length;
   const last=i>=o.length-1;
-  $("#sub").textContent=`${o.length.toLocaleString("ar-SA")} بطاقة — باقي لك ${unseen.toLocaleString("ar-SA")} ما قرأتها`;
-  const nextLbl=busy&&last?"جاري تجهيز معلومات جديدة…":last?(sample?"معلومات جديدة ←":"ابدأ من جديد ↺"):"التالية ←";
-  $("#list").innerHTML=(it?card(it,false).replace('class="card"','class="card focus"'):`<div class="empty">ما فيه بطاقات.</div>`)+
+  $("#sub").textContent=`باقي لك ${unseen.toLocaleString("ar-SA")} بطاقة ما قرأتها — واللي قرأتها في «مقروء»`;
+  const nextLbl=busy&&last?"جاري تجهيز معلومات جديدة…":last?(sample?"معلومات جديدة ←":"إنهاء ✓"):"التالية ←";
+  $("#list").innerHTML=(it?card(it,false).replace('class="card"','class="card focus"'):`<div class="empty">قرأت كل بطاقات هذا القسم ✓ تلقاها في «مقروء».${sample?" اضغط «معلومات جديدة» ونجيب لك غيرها.":" وبنضيف بطاقات جديدة قريب."}</div>`)+
     `<div class="pager"><button class="btn" id="prev" ${i===0?"disabled":""}>→ السابقة</button><button class="askbtn" id="next" ${busy&&last?"disabled":""}>${nextLbl}</button></div>`+
     (endNote?`<p class="muted center">${endNote}</p>`:"");
 }
@@ -464,7 +472,7 @@ async function nextCard(){
   const c=CATS.find(x=>x.id===cur);const k=orderFor(c),o=ord[k];endNote="";
   if((pos[k]||0)<o.length-1){pos[k]++;render();if(sample&&!busy&&o.length-pos[k]<=10)gen();return}
   if(sample){const before=o.length;if(busy){for(let t=0;t<400&&busy;t++)await new Promise(r=>setTimeout(r,300))}else await gen();for(let t=0;t<15&&c.all.length<=before&&sample;t++)await new Promise(r=>setTimeout(r,300));orderFor(c);if(ord[k].length>before){pos[k]=before;}else endNote="ما قدرت أجيب معلومات جديدة الحين. جرّب بعد شوي.";render();return}
-  pos[k]=0;endNote="خلصت بطاقات القسم، رجعنا من البداية.";render();
+  delete ord[k];endNote="";render();
 }
 let dayOff=0;
 function today(){
@@ -477,7 +485,7 @@ function today(){
 }
 function skipSeen(){const c=CATS.find(x=>x.id===cur);if(!c)return;const k=orderFor(c),o=ord[k];let i=pos[k]||0;
   if(o[i]&&SEEN.has(o[i])){let j=o.findIndex((x,n)=>n>i&&!SEEN.has(x));if(j<0)j=o.findIndex(x=>!SEEN.has(x));if(j>=0)pos[k]=j}}
-function go(id,push=true){cur=id;listMode=false;endNote="";query="";aiAns=null;$("#q").value="";$("#clr").hidden=true;if(id!=="home")skipSeen();render();if(push){try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}}window.scrollTo({top:0})}
+function go(id,push=true){cur=id;listMode=false;endNote="";query="";aiAns=null;$("#q").value="";$("#clr").hidden=true;Object.keys(ord).forEach(k=>{if(k.startsWith(id+"|"))delete ord[k]});render();if(push){try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}}window.scrollTo({top:0})}
 
 // ---- Claude: detailed answer + growing the library ----
 const RULES=`أنت مرجع موسوعي متخصص يكتب بالعربية الفصحى الواضحة. الدقة أهم شيء:
@@ -577,9 +585,9 @@ $("#today").addEventListener("click",e=>{if(e.target.closest("#nextT")){dayOff++
 $("#rnd").addEventListener("click",()=>{
   const pool=ALL.filter(i=>i.t==="q");const it=pool[Math.floor(Math.random()*pool.length)];
   filt="all";opened.delete(it.key);go(it.cat.id);
-  const k=orderFor(it.cat);pos[k]=ord[k].indexOf(it.key);render();
+  const k=orderFor(it.cat);let ix=ord[k].indexOf(it.key);if(ix<0){ord[k].splice(pos[k]||0,0,it.key);ix=ord[k].indexOf(it.key)}pos[k]=ix;render();
 });
-function fromHash(){const h=location.hash.slice(1);if(CATS.some(c=>c.id===h))go(h,false);else{cur="home";render()}}
+function fromHash(){const h=location.hash.slice(1);if(h==="read"||CATS.some(c=>c.id===h))go(h,false);else{cur="home";render()}}
 window.addEventListener("hashchange",fromHash);
 rebuild();fromHash();hookClaude();
 </script>
